@@ -1,0 +1,127 @@
+---
+title: "Flag Analysis"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+1 - Load in the Data (saved as comma delimitted .txt)
+```{r}
+data <- read.delim("C:/Users/timst/git/ASK-Research/Data/flag_data.txt", header = FALSE, sep = ",")
+data
+#Is already a dataframe
+is.data.frame(data)
+#Add column name
+names(data)
+
+
+```
+2 - Rename the variables of the columns
+```{r}
+library(dplyr)
+newData <- data %>%
+  rename(Name = V1,Landmass = V2,Zone = V3,Area = V4,Population = V5,Language = V6,Religion = V7,Bars = V8,Stripes = V9,Colors = V10,Red = V11,Green = V12,Blue = V13,Gold = V14,White = V15,Black = V16,Orange = V17,Mainhue = V18,Circles = V19,Crosses = V20,Saltires = V21,Quarters = V22,Sunstars = V23,Crescent = V24,Triangle = V25,Icon = V26,Animate = V27,Text = V28,Topleft = V29,Botright = V30)
+newData
+```
+
+
+3 - Now that the data is loaded in, we can start building a model. Since the dataset, came from UCI ML Repository, it is already clean.
+    We will split the dataset 80% train and 20% test. Thus, build the model that allows data to be split into training and testing data.
+```{r}
+create_train_test <- function(newData, size = 0.8, train = TRUE) {
+    n_row = nrow(newData)
+    total_row = size * n_row
+    train_sample <- 1: total_row
+    if (train == TRUE) {
+        return (newData[train_sample, ])
+    } else {
+        return (newData[-train_sample, ])
+    }
+}
+
+```
+
+
+4 - Create the training and test data
+```{r}
+training_data <- create_train_test(newData, 0.8, train = TRUE)
+test_data <- create_train_test(newData,0.8,train = FALSE)
+#Find the dimensions of the training and testing data
+dim(training_data)
+dim(test_data)
+```
+So, the training dataset has 155 rows and the test dataset has 39 rows.
+Both datasets, as expected, have 30 columns.
+
+
+5 - Verify that randomization is correct
+```{r}
+prop.table(table(training_data$Landmass))
+prop.table(table(test_data$Landmass))
+
+prop.table(table(training_data$Religion))
+prop.table(table(test_data$Religion))
+```
+As we see, the datasets have similar probability for being a respective landmass and religion. I did not test every variable but these few should indicate that the training and test data was split correctly.
+
+6- Install the rpart.plot function to continue building the model
+```{r}
+library(rpart)
+library(rpart.plot)
+
+#use Blue for a decision tree
+fit <- rpart(Blue~ Red+Green+White+Black+Orange, data = training_data, method = 'class')
+rpart.plot(fit, box.palette = "lightblue")
+
+#Start with continent
+fit2 <- rpart(Landmass~ Text+Triangle+Icon+Animate, data = training_data, method = 'class')
+rpart.plot(fit2, box.palette = "pink")
+```
+So, from the rpart plot of fit, we can see that 52% of flags have blue in them. Now, of all the flags, 48% have green and 52% don't have green. Continuing down the rpart.plot, they continue to break up into white, black, and orange. The rpart.plot does not branch into Red.
+
+Now, from the rpart plot of fit2, we start off by breaking the data up by continent. From there, we see if there an animate image (eg. eagle, hand, etc.) on the flage. 81% of flags do not have an animate object on the flag. From the animate level, I then check to see if a triangle is an icon (inamminate object such as a boat) is  not present. 68% of flags that don't have an animate object do not have an inanimate object either. Finally, the recursive partition broke those 68% into triangle or no triangle, of which 60% have triangle. There are some interesting conclusions to be drawn from the recursive partition:
+  1.) 34% of North American flags have an animate object on them. 
+  2.) Triangles are quite common (60% present) on flags that do not have animate objects or inanimate objects.
+  3.)
+
+
+
+7 - Let's try Random Forest model
+```{r}
+library(party)
+library(caret)
+library(randomForest)
+# Create the forest
+output.forest <- randomForest(Landmass~., data = training_data, importance = TRUE)
+print(output.forest)
+
+#Print importance of each predictor
+print(importance(output.forest,type = 1))
+
+
+```
+As we can see, in predicting which continent we are on, the geographical quadrant, language, and religion are the largest features that determine the continent (Landmass)
+Two features that were more important that most, but not as important as the top 3 are if the flag has green and the primary color of the flag. While I expected the first 3 to play a major role, I wouldn't have thought that green and the primary flag clor would play such pivotal role.
+
+
+8 - Let's build a Gaussian Mixture Model (GMM) (I am a bit confused on this model, just looked at the webpage for the R documentation of the Mclust function and tried to use it) .
+```{r}
+library(mclust)
+mb <- Mclust(training_data)
+
+#optimal selected model
+mb$modelName
+
+#optimal number of clusters
+mb$G
+# probability for an observation to be in a given cluster
+head(mb$z)
+
+# get probabilities, means, variances
+summary(mb, parameters = TRUE)
+
+plot(mb, what=c("classification"))
+```
+
